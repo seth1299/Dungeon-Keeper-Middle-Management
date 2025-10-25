@@ -1,0 +1,36 @@
+{
+  "name": "dungeon-keeper-middle-management",
+  "version": "0.9.1",
+  "description": "Solo HTML implementation of Dungeon Keeper: Middle Management with desktop wrapper",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.2.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.dungeonkeeper.middlemanagement",
+    "productName": "Dungeon Keeper Middle Management",
+    "files": [
+      "index.html",
+      "styles.css",
+      "data/**/*",
+      "main.js",
+      "preload.js",
+      "Current_Player_Sheet.md",
+      "README.md",
+      "LICENSE"
+    ],
+    "extraResources": [
+      {
+        "from": "data",
+        "to": "data"
+      }
+    ]
+  }
+}
