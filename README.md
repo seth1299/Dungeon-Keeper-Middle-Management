@@ -23,7 +23,7 @@
 3. Package a single-file executable:
    - macOS/Linux: 
       ```bash
-      pyinstaller --onefile --windowed --add-data "index.html:." --add-data "styles.css:." --add-data "data:data" app.py
+      pyinstaller --onefile --windowed --add-data "index.html:." --add-data "styles.css:." --add-data "data:data" --name "Dungeon Keeper - Middle Management" app.py
    - Windows (use `;` instead of `:`): 
       ```bash 
       pyinstaller --onefile --windowed --add-data "index.html;." --add-data "styles.css;." --add-data "data;data" --name "Dungeon Keeper - Middle Management" app.py
