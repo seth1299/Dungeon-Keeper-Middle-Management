@@ -17,12 +17,14 @@
 1. Serve the repo with any static web server (e.g., `python -m http.server 8000`).
 2. Visit `http://localhost:8000/index.html` in your browser.
 
-### Desktop applet (Electron wrapper)
-1. Ensure you have Node 18+ installed, then run `npm install`.
-2. `npm start` launches the desktop shell with live reload-friendly devtools.
-3. `npm run dist` produces platform-specific executables in `dist/` using electron-builder.
+### Desktop applet (Python + PyInstaller)
+1. Install dependencies: `pip install -r requirements.txt`.
+2. Launch the desktop build for local play: `python app.py`.
+3. Package a single-file executable:
+   - macOS/Linux: `pyinstaller --onefile --windowed --add-data "index.html:." --add-data "styles.css:." --add-data "data:data" app.py`
+   - Windows (use `;` instead of `:`): `pyinstaller --onefile --windowed --add-data "index.html;." --add-data "styles.css;." --add-data "data;data" app.py`
 
-The desktop build bundles the `/data` directory, so JSON overrides load without any CORS hassles. Browser mode still works for lightweight hosting or sharing the raw HTML.
+The packaged build embeds the `/data` directory, so JSON overrides load without any CORS hassles. Browser mode still works for lightweight hosting or sharing the raw HTML.
 
 ---
 
