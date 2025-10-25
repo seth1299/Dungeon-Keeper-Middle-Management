@@ -154,6 +154,8 @@
     ],
   };
 
+  const isDesktopApp = Boolean(window.dkmm?.loadJSON);
+
   // ------------------ State ------------------
   const state = {
     threat: 1, reputation: 0, eu: 0,
@@ -171,11 +173,20 @@
   // ------------------ Data Loading (optional JSON overrides) ------------------
   async function loadData() {
     const tryGet = async (path) => {
+      if (isDesktopApp) {
+        try {
+          return await window.dkmm.loadJSON(path);
+        } catch {
+          return null;
+        }
+      }
       try {
         const r = await fetch(path);
         if (!r.ok) throw new Error("not ok");
         return await r.json();
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     };
     const b = await tryGet("data/budgets.json") || DEFAULT.budgets;
     const r = await tryGet("data/rooms.json")   || DEFAULT.rooms;
@@ -860,6 +871,13 @@
     $("#themeDark").onclick = ()=> document.documentElement.setAttribute("data-theme","dark");
     $("#themeLight").onclick = ()=> document.documentElement.setAttribute("data-theme","light");
     $("#themeSolar").onclick = ()=> document.documentElement.setAttribute("data-theme","solar");
+
+    if (isDesktopApp) {
+      const footer = document.querySelector('footer');
+      if (footer) {
+        footer.textContent = 'Desktop build ready: data overrides load from the bundled /data folder, and you can create executables via “npm run dist”.';
+      }
+    }
   }
 
   boot();

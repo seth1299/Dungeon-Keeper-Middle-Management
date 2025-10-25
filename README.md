@@ -1,13 +1,28 @@
 # Dungeon Keeper: Middle Management — Solo HTML Edition (GDD)
 
 **Revision:** v0.9 (Solo Edition)  
-**Audience:** Single-player, browser (desktop/mobile)  
+**Audience:** Single-player, browser (desktop/mobile) or packaged desktop app
 **Session Length:** 10–25 minutes per raid cycle  
 **Pillars:**  
 1) **Plan smart** (resource tradeoffs, room synergies)  
 2) **Resolve fast** (one-roll skirmishes, tight tables)  
 3) **Grow notorious** (Threat & Reputation feedback)  
 4) **Protect the phylactery** (clear loss state with upgrades)
+
+---
+
+## Quick start & runtime options
+
+### Browser (classic static files)
+1. Serve the repo with any static web server (e.g., `python -m http.server 8000`).
+2. Visit `http://localhost:8000/index.html` in your browser.
+
+### Desktop applet (Electron wrapper)
+1. Ensure you have Node 18+ installed, then run `npm install`.
+2. `npm start` launches the desktop shell with live reload-friendly devtools.
+3. `npm run dist` produces platform-specific executables in `dist/` using electron-builder.
+
+The desktop build bundles the `/data` directory, so JSON overrides load without any CORS hassles. Browser mode still works for lightweight hosting or sharing the raw HTML.
 
 ---
 
