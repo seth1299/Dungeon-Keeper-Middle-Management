@@ -1,0 +1,7 @@
+[
+  { "threat": 1, "baseEU": 150, "partyTierSum": 2, "roomsPerRaid": 3 },
+  { "threat": 2, "baseEU": 180, "partyTierSum": 3, "roomsPerRaid": 3 },
+  { "threat": 3, "baseEU": 210, "partyTierSum": 4, "roomsPerRaid": 4 },
+  { "threat": 4, "baseEU": 240, "partyTierSum": 5, "roomsPerRaid": 4 },
+  { "threat": 5, "baseEU": 270, "partyTierSum": 6, "roomsPerRaid": 5 }
+]

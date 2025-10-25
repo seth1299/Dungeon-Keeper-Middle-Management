@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dungeon Keeper: Middle Management — Solo HTML</title>
+  <link rel="stylesheet" href="styles.css" />
+  <meta name="color-scheme" content="dark light" />
+</head>
+<body>
+  <header>
+    <h1>Dungeon Keeper: Middle Management <small class="dim">solo / ASCII</small></h1>
+    <div class="row" role="group" aria-label="Theme">
+      <button class="secondary" id="themeDark">Dark</button>
+      <button class="secondary" id="themeLight">Light</button>
+      <button class="secondary" id="themeSolar">Solar</button>
+    </div>
+    <button class="secondary" id="toggleVerbosity" aria-pressed="false" title="Toggle detailed logs">Verbose Log: Off</button>
+    <div class="row">
+      <button id="saveBtn" class="secondary" title="Save to your browser">Save</button>
+      <button id="loadBtn" class="secondary" title="Load from your browser">Load</button>
+      <button id="resetBtn" class="secondary" title="Reset game">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- LEFT: ECONOMY / SHOP -->
+    <section class="panel" aria-label="Economy and Actions">
+      <h2>Economy & Actions</h2>
+      <div class="kv">
+        <div>EU</div><div></div><div id="eu" class="badge ok">0</div><div></div>
+        <div>Threat</div><div></div><div id="threat" class="badge warn">1</div><div></div>
+        <div>Reputation</div><div></div><div id="rep" class="badge">0</div><div></div>
+        <div>Phase</div><div></div><div id="phase" class="badge">Planning</div><div></div>
+      </div>
+
+      <div class="row">
+        <button id="btnIncome" class="secondary">Income & Upkeep</button>
+        <button id="btnStartRaid">Run Raid</button>
+      </div>
+      <small class="dim">Planning: income & upkeep; buy/assign; optional project. Then raid runs room-by-room; finally, payout, threat/rep adjust, repairs/salvage. </small>
+
+      <div class="hr"></div>
+      <h3>Hire Minions</h3>
+      <div id="minionShop" class="asset-grid" aria-live="polite"></div>
+
+      <h3>Buy Traps</h3>
+      <div id="trapShop" class="asset-grid" aria-live="polite"></div>
+    </section>
+
+    <!-- CENTER: MAP + ROOMS -->
+    <section class="panel" aria-label="Dungeon Map">
+      <h2>Dungeon Map (ASCII)</h2>
+      <div class="map-legend">
+        <span class="legend-item"><span class="legend-swatch sw-entry"></span> Entry(E)</span>
+        <span class="legend-item"><span class="legend-swatch sw-corr"></span> Corridor(A/B/C)</span>
+        <span class="legend-item"><span class="legend-swatch sw-vault"></span> Vault(V)</span>
+        <span class="legend-item"><span class="legend-swatch sw-sanctum"></span> Sanctum(S)</span>
+      </div>
+      <pre id="ascii" role="img" aria-label="ASCII dungeon map"></pre>
+
+      <div class="hr"></div>
+      <h3>Rooms</h3>
+      <div id="roomList" class="room-list"></div>
+    </section>
+
+    <!-- RIGHT: PARTY/LOG -->
+    <section class="panel" aria-label="Raid & Log">
+      <h2>Heroes & Raid Controls</h2>
+      <div class="row">
+        <button id="btnStep" class="secondary" disabled>Step Room</button>
+        <button id="btnResolve" class="secondary" disabled>Resolve To End</button>
+      </div>
+      <table class="table" aria-label="Current party">
+        <thead><tr><th>Hero</th><th>Tier</th><th>Per</th><th>HP</th><th>Tags</th></tr></thead>
+        <tbody id="partyTable"></tbody>
+      </table>
+
+      <h3>Raid Log</h3>
+      <div id="log" class="log" aria-live="polite" aria-atomic="false"></div>
+    </section>
+  </main>
+
+  <footer>
+    Pro-tip: You can optionally override built-in content with small JSON files in <code>/data</code>. See examples below. (When using local JSON, serve the folder from a local web server so <code>fetch()</code> can read the files.)
+  </footer>
+
+  <!-- ======= GAME SCRIPT ======= -->
+  <script>
+  // ------------------ Utilities ------------------
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => [...document.querySelectorAll(sel)];
+  const rand = (n) => Math.floor(Math.random() * n);
+  const roll = (s) => {
+    // e.g., "2d6", "1d6+2"
+    const m = s.match(/(\\d+)d(\\d+)([+-]\\d+)?/);
+    if (!m) return 0;
+    const [_, cStr, dStr, modStr] = m;
+    const c = parseInt(cStr,10), d = parseInt(dStr,10), mod = modStr ? parseInt(modStr,10) : 0;
+    let t = 0; for (let i=0;i<c;i++) t += 1 + rand(d);
+    return { total: t + mod, detail: `${c}d${d}${mod? (mod>0?'+':'')+mod: ''} → ${t}${mod? (mod>0?'+':'')+mod: ''} = ${t+mod}` };
+  };
+  const d6 = () => 1 + rand(6);
+  const nd6 = (n) => { let s=0, rolls=[]; for (let i=0;i<n;i++){ const r=d6(); s+=r; rolls.push(r);} return {sum:s, rolls}; };
+  const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+
+  // ------------------ Default Data ------------------
+  // (These are used if /data/*.json are not present.)
+  const DEFAULT = {
+    budgets: [
+      { threat:1, baseEU:150, partyTierSum:2, roomsPerRaid:3 },
+      { threat:2, baseEU:180, partyTierSum:3, roomsPerRaid:3 },
+      { threat:3, baseEU:210, partyTierSum:4, roomsPerRaid:4 },
+      { threat:4, baseEU:240, partyTierSum:5, roomsPerRaid:4 },
+      { threat:5, baseEU:270, partyTierSum:6, roomsPerRaid:5 },
+    ],
+    rooms: [
+      { id:"E", name:"Entry", capacity:1, trapSlots:1, tags:["Entry"] },
+      { id:"A", name:"Twisting Corridor", capacity:2, trapSlots:1, tags:["Corridor","AmbushFriendly"] },
+      { id:"B", name:"Collapsed Hall", capacity:2, trapSlots:1, tags:["Corridor"] },
+      { id:"C", name:"Gloom Walk", capacity:2, trapSlots:1, tags:["Corridor","AmbushFriendly"] },
+      { id:"V", name:"Vault", capacity:2, trapSlots:2, tags:["Vault"] },
+      { id:"S", name:"Sanctum", capacity:2, trapSlots:2, tags:["Sanctum"] },
+    ],
+    edges: [
+      ["E","A"],["A","B"],["B","V"],["B","C"],["C","S"]
+    ],
+    traps: [
+      { key:"spike", name:"Spike Plate", tier:1, subtlety:1, complexity:1, lethality:1, reliability:0, riders:["Shaken"], euCost:60, upkeep:6 },
+      { key:"darts", name:"Poison Darts", tier:2, subtlety:2, complexity:2, lethality:2, reliability:0, riders:["Shaken"], euCost:100, upkeep:10 },
+      { key:"pit", name:"Concealed Pit", tier:2, subtlety:3, complexity:1, lethality:2, reliability:-1, riders:[], euCost:90, upkeep:9 },
+      { key:"sigil", name:"Hex Sigil", tier:3, subtlety:2, complexity:3, lethality:3, reliability:+1, riders:["Exhausted"], euCost:160, upkeep:16 },
+    ],
+    minions: [
+      { key:"skel", name:"Skeleton", tier:1, role:"frontline", hp:6, perks:[], euCost:50, upkeep:5 },
+      { key:"imp", name:"Imp", tier:1, role:"ambusher", hp:6, perks:[], euCost:45, upkeep:5 },
+      { key:"arch", name:"Archer", tier:2, role:"ranged", hp:8, perks:[], euCost:90, upkeep:10 },
+      { key:"ogre", name:"Ogre", tier:3, role:"frontline", hp:12, perks:[], euCost:150, upkeep:15 },
+      { key:"adept", name:"Adept", tier:2, role:"caster", hp:8, perks:["SupportFront"], euCost:110, upkeep:12 },
+    ],
+    heroes: [
+      { archetype:"Fighter",  tier:2, perception:1, hp:10, lootValue:40, synergyTags:["defender","frontline"] },
+      { archetype:"Rogue",    tier:1, perception:2, hp:6,  lootValue:30, synergyTags:["rogue"] },
+      { archetype:"Cleric",   tier:1, perception:1, hp:6,  lootValue:35, synergyTags:["healer"] },
+      { archetype:"Mage",     tier:2, perception:1, hp:8,  lootValue:45, synergyTags:["mage","ranged"] },
+      { archetype:"Ranger",   tier:2, perception:2, hp:8,  lootValue:40, synergyTags:["ranged"] },
+    ],
+  };
+
+  // ------------------ State ------------------
+  const state = {
+    threat: 1, reputation: 0, eu: 0,
+    phase: "Planning",
+    budgets: [], rooms: [], edges: [], traps: [], minions: [], heroes: [],
+    inventory: { traps: [], minions: [] }, // unassigned
+    placed: { traps: {}, minions: {} },    // by roomId
+    inertTraps: {},                        // roomId -> [trapInstanceId]
+    phylactery: "S",                       // default Sanctum
+    raid: null,                            // current raid info
+    verbose: false,
+  };
+
+  // ------------------ Data Loading (optional JSON overrides) ------------------
+  async function loadData() {
+    const tryGet = async (path) => {
+      try {
+        const r = await fetch(path);
+        if (!r.ok) throw new Error("not ok");
+        return await r.json();
+      } catch { return null; }
+    };
+    const b = await tryGet("data/budgets.json") || DEFAULT.budgets;
+    const r = await tryGet("data/rooms.json")   || DEFAULT.rooms;
+    const e = await tryGet("data/edges.json")   || DEFAULT.edges;
+    const t = await tryGet("data/traps.json")   || DEFAULT.traps;
+    const m = await tryGet("data/minions.json") || DEFAULT.minions;
+    const h = await tryGet("data/heroes.json")  || DEFAULT.heroes;
+
+    state.budgets = b; state.rooms = r; state.edges = e;
+    state.traps = t; state.minions = m; state.heroes = h;
+
+    // Seed placed containers
+    for (const room of state.rooms) {
+      state.placed.traps[room.id] = [];
+      state.placed.minions[room.id] = [];
+    }
+  }
+
+  // ------------------ Map / Graph helpers ------------------
+  function neighbors(id) {
+    const n = [];
+    for (const [a,b] of state.edges) {
+      if (a===id) n.push(b);
+      if (b===id) n.push(a);
+    }
+    return [...new Set(n)];
+  }
+  function distance(a, b) {
+    // BFS
+    const q=[a], seen={ [a]:0 };
+    while (q.length) {
+      const x = q.shift();
+      if (x===b) return seen[x];
+      for (const nb of neighbors(x)) if (seen[nb]==null) { seen[nb]=seen[x]+1; q.push(nb); }
+    }
+    return Infinity;
+  }
+
+  // ------------------ UI Rendering ------------------
+  function renderHeader() {
+    $("#eu").textContent = state.eu.toString();
+    $("#threat").textContent = state.threat.toString();
+    $("#rep").textContent = state.reputation.toString();
+    $("#phase").textContent = state.phase;
+  }
+
+  function asciiMap() {
+    // Fixed layout for the 6-room sample graph (E-A-B-V and B-C-S)
+    //   E—A—B—V
+    //        └─C─S
+    // Boxes show room ids; we will annotate with counts.
+    const c = (id) => {
+      const mCount = state.placed.minions[id].length;
+      const tCount = state.placed.traps[id].length;
+      const p = (state.phylactery===id) ? "*" : " ";
+      return `[${id}${p}|m${mCount}|t${tCount}]`;
+    };
+    // attempt to position by ids present:
+    const has = (id) => state.rooms.find(x=>x.id===id);
+    const line1 = `${has("E")?c("E"):""}—${has("A")?c("A"):""}—${has("B")?c("B"):""}—${has("V")?c("V"):""}`;
+    const line2 = `           └─${has("C")?c("C"):""}─${has("S")?c("S"):""}`;
+    return [line1, line2].join("\\n");
+  }
+
+  function renderMap() { $("#ascii").textContent = asciiMap(); }
+
+  function renderRoomList() {
+    const el = $("#roomList"); el.innerHTML = "";
+    for (const room of state.rooms) {
+      const div = document.createElement("div"); div.className = "room";
+      div.innerHTML = `
+        <header><strong>${room.name}</strong>
+          <span class="badge">${room.id}</span>
+        </header>
+        <div class="row">
+          <label class="focus-outline">
+            Phylactery here? <input type="radio" name="phy" value="${room.id}" ${state.phylactery===room.id?'checked':''}/>
+          </label>
+        </div>
+        <div class="row"><small class="dim">Tags: ${room.tags.join(", ")}</small></div>
+        <div>
+          <strong>Minions</strong>
+          <div class="row" id="minions-${room.id}">
+            ${state.placed.minions[room.id].map((m,i)=> assetChip(`${m.name} T${m.tier}`, ()=> removeMinion(room.id,i))).join("")}
+          </div>
+          <select id="minionSel-${room.id}"></select>
+          <button class="secondary" data-add-minion="${room.id}">Assign</button>
+        </div>
+        <div>
+          <strong>Traps</strong>
+          <div class="row" id="traps-${room.id}">
+            ${state.placed.traps[room.id].map((t,i)=> assetChip(`${t.name} T${t.tier}${t.inert?' (Inert)':''}`, ()=> removeTrap(room.id,i))).join("")}
+          </div>
+          <select id="trapSel-${room.id}"></select>
+          <button class="secondary" data-add-trap="${room.id}">Place</button>
+        </div>
+      `;
+      el.appendChild(div);
+      // populate selectors
+      const selM = div.querySelector(`#minionSel-${room.id}`);
+      const selT = div.querySelector(`#trapSel-${room.id}`);
+      selM.innerHTML = state.inventory.minions.map((m,idx)=> `<option value="${idx}">${m.name} (T${m.tier} ${m.role})</option>`).join("");
+      selT.innerHTML = state.inventory.traps.map((t,idx)=> `<option value="${idx}">${t.name} (T${t.tier})</option>`).join("");
+      // attach handlers
+      div.querySelector(`[data-add-minion="${room.id}"]`).onclick = () => {
+        const idx = parseInt(selM.value,10);
+        if (Number.isNaN(idx)) return;
+        assignMinion(room.id, idx);
+      };
+      div.querySelector(`[data-add-trap="${room.id}"]`).onclick = () => {
+        const idx = parseInt(selT.value,10);
+        if (Number.isNaN(idx)) return;
+        placeTrap(room.id, idx);
+      };
+      // phylactery toggle
+      div.querySelector(`input[name="phy"]`).onchange = (e)=> { state.phylactery = e.target.value; renderMap(); };
+    }
+  }
+
+  function assetChip(label, onRemove) {
+    const id = "x"+Math.random().toString(36).slice(2);
+    setTimeout(()=>{ const btn = document.getElementById(id); btn && (btn.onclick = onRemove); }, 0);
+    return `<span class="badge">${label}</span><button id="${id}" class="ghost" title="Remove">✕</button>`;
+  }
+
+  function renderShops() {
+    const ms = $("#minionShop"); const ts = $("#trapShop");
+    ms.innerHTML = state.minions.map((m, i)=> shopCard(m, ()=> buyMinion(i))).join("");
+    ts.innerHTML = state.traps.map((t, i)=> shopCard(t, ()=> buyTrap(i))).join("");
+  }
+
+  function shopCard(item, onBuy) {
+    const div = document.createElement("div"); div.className="asset";
+    div.innerHTML = `
+      <div>
+        <strong>${item.name}</strong>
+        <div class="meta">T${item.tier} · ${item.role? item.role : "trap"} ${item.subtlety!=null? ` · Subtle ${item.subtlety}/Comp ${item.complexity}/Leth ${item.lethality}`:""}</div>
+        <div class="meta">EU ${item.euCost} · Upkeep ${item.upkeep}</div>
+      </div>
+      <div><button class="secondary">Buy</button></div>
+    `;
+    setTimeout(()=> div.querySelector("button").onclick = onBuy, 0);
+    return div.outerHTML;
+  }
+
+  // ------------------ Inventory Ops ------------------
+  function buyMinion(i) {
+    const m = state.minions[i];
+    if (state.eu < m.euCost) return log(`Not enough EU for ${m.name}`, "bad");
+    state.eu -= m.euCost; state.inventory.minions.push(structuredClone(m));
+    renderHeader(); renderRoomList(); log(`Hired ${m.name} (T${m.tier}) for ${m.euCost} EU.`, "ok");
+  }
+  function buyTrap(i) {
+    const t = state.traps[i];
+    if (state.eu < t.euCost) return log(`Not enough EU for ${t.name}`, "bad");
+    state.eu -= t.euCost; const inst = structuredClone(t); inst.inert = false;
+    state.inventory.traps.push(inst);
+    renderHeader(); renderRoomList(); log(`Purchased ${t.name} (T${t.tier}) for ${t.euCost} EU.`, "ok");
+  }
+  function assignMinion(roomId, idx) {
+    const room = state.rooms.find(r=>r.id===roomId);
+    if (state.placed.minions[roomId].length >= room.capacity) return log(`Room ${roomId} is at capacity.`, "warn");
+    const [m] = state.inventory.minions.splice(idx,1);
+    state.placed.minions[roomId].push(m); renderRoomList(); renderMap();
+  }
+  function placeTrap(roomId, idx) {
+    const room = state.rooms.find(r=>r.id===roomId);
+    if (state.placed.traps[roomId].length >= room.trapSlots) return log(`No trap slots left in ${roomId}.`, "warn");
+    const [t] = state.inventory.traps.splice(idx,1);
+    state.placed.traps[roomId].push(t); renderRoomList(); renderMap();
+  }
+  function removeMinion(roomId, i) {
+    const [m] = state.placed.minions[roomId].splice(i,1);
+    state.inventory.minions.push(m); renderRoomList(); renderMap();
+  }
+  function removeTrap(roomId, i) {
+    const [t] = state.placed.traps[roomId].splice(i,1);
+    state.inventory.traps.push(t); renderRoomList(); renderMap();
+  }
+
+  // ------------------ Raid Generation ------------------
+  function budgetRow() { return state.budgets.find(b=>b.threat===state.threat) || state.budgets[state.budgets.length-1]; }
+  function generateParty() {
+    const { partyTierSum } = budgetRow();
+    const pool = structuredClone(state.heroes);
+    const party = [];
+    let sum=0, guard=50;
+    while (sum < partyTierSum && pool.length && guard-- > 0) {
+      const i = rand(pool.length);
+      const h = pool.splice(i,1)[0];
+      if (sum + h.tier <= partyTierSum || sum===0) { // ensure at least one hero
+        party.push(h); sum += h.tier;
+      }
+    }
+    // Apply synergy PR tags
+    const tags = new Set(party.flatMap(p=>p.synergyTags||[]));
+    const has = (t) => tags.has(t);
+    const synergy = (has("healer")?1:0) + (has("rogue")?1:0)
+                  + ((has("mage")||has("caster")) && has("frontline")?1:0)
+                  + (has("defender") && has("ranged")?1:0);
+    const partyTierBonus = Math.min(2, Math.max(0, party.reduce((a,b)=>a+b.tier,0) - party.length)); // guideline cap +2
+    return { party, synergy, partyTierBonus };
+  }
+
+  // ------------------ Pathing (heuristic) ------------------
+  function chooseNextRoom(current, goal, ctx) {
+    const cands = neighbors(current);
+    let best = null, bestScore = -1e9;
+    for (const r of cands) {
+      let s = 0;
+      if (r===goal || distance(r,goal) < distance(current,goal)) s += 3;
+      if (!ctx.visited.has(r)) s += 1;
+      if (ctx.recentCombat) s += 1;
+      if (ctx.trapJustDetected) s -= 2;
+      if (ctx.exhausted) s -= 2;
+      s -= ctx.downed * 1;
+      if (s > bestScore) { bestScore = s; best = r; }
+    }
+    return best || cands[0];
+  }
+
+  // ------------------ Ratings & Synergies ------------------
+  function roomMR(roomId) {
+    const list = state.placed.minions[roomId];
+    let tiers = list.reduce((a,m)=>a+m.tier,0);
+    const roles = new Set(list.map(m=>m.role));
+    let synergy = 0;
+    if (roles.size >= 2) synergy += 1;
+    const room = state.rooms.find(r=>r.id===roomId);
+    const hasRole = (r)=> list.some(m=>m.role===r);
+    if (room.tags.includes("AmbushFriendly") && hasRole("ambusher")) synergy += 1;
+    if (hasRole("caster") && hasRole("frontline")) synergy += 1;
+    // elites—none in default; placeholder if perk includes "Elite"
+    if (list.some(m=>m.perks?.includes("Elite"))) synergy += list.filter(m=>m.perks?.includes("Elite")).length;
+    return { mr: tiers + synergy, breakdown: { tiers, synergy } };
+  }
+  function partyPR(party, extraMods=0) {
+    const tiers = party.reduce((a,h)=>a+h.tier,0);
+    const tags = new Set(party.flatMap(h=>h.synergyTags||[]));
+    let synergy = 0;
+    if (tags.has("healer")) synergy += 1;
+    if (tags.has("rogue")) synergy += 1;
+    if ((tags.has("mage")||tags.has("caster")) && tags.has("frontline")) synergy += 1;
+    if (tags.has("defender") && tags.has("ranged")) synergy += 1;
+    return { pr: tiers + synergy + extraMods, breakdown: { tiers, synergy, extraMods } };
+  }
+
+  // ------------------ Trap Resolve ------------------
+  function resolveTraps(roomId, raid) {
+    const results = [];
+    const armed = state.placed.traps[roomId].filter(t=>!t.inert);
+    for (const t of armed) {
+      const bestPer = Math.max(...raid.party.map(h=>h.perception));
+      const detectTN = 8 + t.subtlety;
+      const detectRoll = roll("2d6");
+      const detectVal = detectRoll.total + raid.partyTierBonus + bestPer;
+      let trapDetected = false, disarmMod = 0, fired = false, fromBotch = false;
+      if (detectVal >= 10 + (detectTN-10)) { trapDetected = true; }
+      else if (detectVal >= 7 + (detectTN-10)) { trapDetected = true; disarmMod = -1; }
+      else { fired = true; }
+
+      log(`Detect trap ${t.name}: 2d6 (${detectRoll.detail}) + bestPer ${bestPer} + TierBonus ${raid.partyTierBonus} vs TN ${detectTN} → ${trapDetected? (disarmMod? 'risky detect' : 'detected') : 'MISS → TRIGGER'}`);
+
+      if (trapDetected && !fired) {
+        const disarmTN = 8 + t.complexity;
+        const disRoll = roll(`2d6${disarmMod}`);
+        const disVal = disRoll.total + bestPer;
+        if (disVal >= 10 + (disarmTN-10)) {
+          t.inert = true; log(`Disarm ${t.name}: 2d6 (${disRoll.detail}) + bestPer ${bestPer} vs TN ${disarmTN} → SAFE DISABLE (Inert).`, "ok");
+        } else if (disVal >= 7 + (disarmTN-10)) {
+          t.inert = true; log(`Disarm ${t.name}: ${disRoll.detail} + ${bestPer} vs ${disarmTN} → PARTIAL (blowback).`, "warn");
+          raid.flags.blowback = true;
+        } else {
+          fired = true; fromBotch = true;
+          log(`Disarm ${t.name}: ${disRoll.detail} + ${bestPer} vs ${disarmTN} → BOTCH → TRIGGER!`, "bad");
+        }
+      }
+
+      if (fired) {
+        const {sum, rolls} = nd6(t.lethality);
+        const dmg = sum + (t.reliability||0);
+        results.push({ name: t.name, dmg, riders: t.riders || [], fromBotch });
+        log(`TRAP TRIGGERS: ${t.name} → ${t.lethality}d6 [${rolls.join(",")}] ${t.reliability? (t.reliability>0?'+':'')+t.reliability : ''} = ${dmg} dmg. Riders: ${(t.riders||[]).join(", ")||'—'}`, fromBotch? "bad":"warn");
+        // apply to party evenly
+        distributeDamage(raid.party, dmg);
+        for (const r of (t.riders||[])) {
+          if (r==="Shaken") raid.flags.shaken = true;
+          if (r==="Exhausted") raid.flags.exhausted = true;
+        }
+      }
+    }
+    return results;
+  }
+
+  function distributeDamage(units, dmg) {
+    // simple: damage lead hero first, then next, etc.
+    let remaining = dmg, i = 0;
+    while (remaining > 0 && units.length) {
+      const target = units[i % units.length];
+      const take = Math.min(remaining, 4); // chunking for readability
+      target.hp = Math.max(0, target.hp - take);
+      remaining -= take;
+      i++;
+    }
+    // remove dead heroes
+    for (let j=units.length-1; j>=0; j--) if (units[j].hp<=0) {
+      log(`☠ ${units[j].archetype} downed!`, "ok");
+      units.splice(j,1);
+    }
+  }
+
+  // ------------------ Skirmish ------------------
+  function resolveSkirmish(roomId, raid) {
+    const { mr, breakdown: mb } = roomMR(roomId);
+    const situ = (raid.flags.shaken? -1 : 0) + (raid.flags.blowback? -1 : 0) + (raid.flags.exhausted? -1 : 0);
+    const { pr, breakdown: pb } = partyPR(raid.party, situ);
+    const delta = mr - pr;
+    const r = roll("2d6");
+    const total = r.total + delta;
+    log(`Skirmish @${roomId}: 2d6 (${r.detail}) + (MR ${mr} − PR ${pr})=${delta} → total ${total}.`);
+    let outcome = "";
+    if (total <= 4) outcome = "Catastrophe";
+    else if (total <= 6) outcome = "Break";
+    else if (total <= 9) outcome = "Bloody exchange";
+    else if (total <= 11) outcome = "Solid defense";
+    else outcome = "Crushing defense";
+
+    // Apply outcome
+    if (outcome === "Catastrophe") {
+      // defenders routed/destroyed; party 0–1d6
+      state.placed.minions[roomId] = [];
+      const d = rand(2) ? d6() : 0;
+      distributeDamage(raid.party, d);
+    } else if (outcome === "Break") {
+      // lose one unit or heavy wounds; party 1d6
+      state.placed.minions[roomId].pop();
+      distributeDamage(raid.party, d6());
+    } else if (outcome === "Bloody exchange") {
+      // defenders ~half HP (simplify: remove one minion); party 2d6
+      state.placed.minions[roomId].pop();
+      distributeDamage(raid.party, nd6(2).sum);
+    } else if (outcome === "Solid defense") {
+      // weakest hero downed or 2d6+2; defenders minor harm
+      if (raid.party.length) {
+        // try down weakest:
+        let idx = 0, minHP = raid.party[0].hp;
+        for (let i=1;i<raid.party.length;i++) if (raid.party[i].hp < minHP) { minHP=raid.party[i].hp; idx=i; }
+        raid.party[idx].hp = 0; distributeDamage(raid.party, 0); // prune via distributeDamage
+      } else {
+        distributeDamage(raid.party, nd6(2).sum + 2);
+      }
+    } else {
+      // Crushing defense: 3d6+3 and Condition to party
+      distributeDamage(raid.party, nd6(3).sum + 3);
+      raid.flags.exhausted = true;
+    }
+    log(`→ Outcome: ${outcome}.`);
+    // Clear one-time flags
+    raid.flags.shaken = false; raid.flags.blowback = false;
+  }
+
+  // ------------------ Raid Flow ------------------
+  function startRaid() {
+    // clone base heroes and reset their HP (since DEFAULT heroes store HP)
+    const partyGen = generateParty();
+    const party = partyGen.party.map(h=>({ ...structuredClone(h) })); // clone
+    const raid = {
+      party, synergy: partyGen.synergy, partyTierBonus: partyGen.partyTierBonus,
+      current: "E",
+      goal: state.phylactery, visited: new Set(["E"]),
+      step: 0, maxSteps: budgetRow().roomsPerRaid,
+      flags: { trapJustDetected:false, recentCombat:false, exhausted:false, shaken:false, blowback:false },
+      loot: 0, breach: false, wiped: false,
+    };
+    // UI
+    $("#partyTable").innerHTML = party.map(h=> `<tr><td>${h.archetype}</td><td>${h.tier}</td><td>${h.perception}</td><td>${h.hp}</td><td>${(h.synergyTags||[]).join(",")}</td></tr>`).join("");
+    $("#btnStep").disabled = false; $("#btnResolve").disabled = false;
+    state.phase = "Raid"; renderHeader();
+    state.raid = raid; log(`Heroes enter: ${party.map(h=>h.archetype).join(", ")} | PR tags +${raid.synergy}, TierBonus +${raid.partyTierBonus}.`);
+    renderMap();
+  }
+
+  function stepRaid() {
+    const R = state.raid;
+    if (!R) return;
+    if (R.step >= R.maxSteps) { endRaid(); return; }
+
+    log(`== ROOM ${R.step+1}/${R.maxSteps}: ${R.current} ==`, "dim");
+    // Trap phase
+    resolveTraps(R.current, R);
+
+    // Skirmish phase (if defenders exist)
+    if (state.placed.minions[R.current].length) {
+      resolveSkirmish(R.current, R);
+      R.flags.recentCombat = true;
+    } else {
+      log(`No defenders in ${R.current}.`, "warn");
+      R.flags.recentCombat = false;
+    }
+
+    // Breach check
+    if (R.current === state.phylactery && R.party.length) {
+      R.breach = true; log(`!!! Phylactery under threat in ${R.current}!`, "bad");
+    }
+
+    // Next room or end
+    if (!R.party.length) {
+      R.wiped = true; log(`Party routed!`, "ok");
+      endRaid(); return;
+    }
+    if (R.current === R.goal) {
+      endRaid(); return;
+    }
+    R.step++;
+    if (R.step >= R.maxSteps) { endRaid(); return; }
+
+    // Heuristic move
+    const next = chooseNextRoom(R.current, R.goal, {
+      visited: R.visited,
+      recentCombat: R.flags.recentCombat,
+      trapJustDetected: R.flags.trapJustDetected,
+      exhausted: R.flags.exhausted,
+      downed: 0 // (tracked implicitly by party length change)
+    });
+    R.visited.add(next);
+    R.current = next;
+    renderMap();
+  }
+
+  function endRaid() {
+    const R = state.raid; if (!R) return;
+    $("#btnStep").disabled = true; $("#btnResolve").disabled = true;
+    // Loot: sum lootValue of downed heroes (approx via party wiped check)
+    let loot = 0;
+    if (R.wiped) loot += 100 + rand(60); // spectacle bonus
+    else loot += 30 + rand(25);
+    state.eu += loot;
+
+    // Adjust Threat & Rep
+    if (R.wiped) { state.threat = clamp(state.threat+1, 1, 5); state.reputation += 1; }
+    if (R.breach) { state.threat = clamp(state.threat-1, 1, 5); state.reputation = Math.max(0, state.reputation-1); }
+
+    log(`Raid resolution → Loot +${loot} EU. Threat=${state.threat}, Rep=${state.reputation}.`);
+    // Repairs (free for MVP) and upkeep EUs
+    const upkeep = upkeepCost();
+    if (upkeep>0) {
+      state.eu = Math.max(0, state.eu - upkeep);
+      log(`Upkeep paid: −${upkeep} EU.`, "dim");
+    }
+
+    state.phase = "Planning"; renderHeader();
+    state.raid = null;
+    // refresh party table
+    $("#partyTable").innerHTML = "";
+  }
+
+  function upkeepCost() {
+    let u=0;
+    for (const rid of Object.keys(state.placed.minions)) {
+      for (const m of state.placed.minions[rid]) u += (m.upkeep||0);
+    }
+    for (const rid of Object.keys(state.placed.traps)) {
+      for (const t of state.placed.traps[rid]) u += (t.upkeep||0);
+    }
+    return Math.round(u);
+  }
+
+  // ------------------ Planning Actions ------------------
+  function doIncome() {
+    const row = budgetRow();
+    state.eu += row.baseEU;
+    log(`Income: +${row.baseEU} EU (base for Threat ${state.threat}).`, "ok");
+    // (Optional salvage/repairs would be here; MVP keeps repairs free)
+    renderHeader();
+  }
+
+  // ------------------ Log ------------------
+  function log(msg, cls="") {
+    const div = document.createElement("div");
+    // verbosity toggle: show everything or summary lines only
+    const compact = !(state.verbose);
+    const isDetail = msg.startsWith("Detect") || msg.startsWith("Disarm") || msg.startsWith("TRAP") || msg.startsWith("Skirmish");
+    if (compact && isDetail) return; // hide detail lines
+    div.innerHTML = cls ? `<span class="${cls}">${msg}</span>` : msg;
+    $("#log").appendChild(div);
+    $("#log").scrollTop = $("#log").scrollHeight;
+  }
+
+  // ------------------ Save/Load ------------------
+  function save() {
+    const copy = structuredClone(state);
+    delete copy.heroes; delete copy.traps; delete copy.minions; delete copy.rooms; delete copy.edges; delete copy.budgets;
+    // Persist only dynamic parts + IDs of assets in rooms/inventory (lightweight)
+    localStorage.setItem("dkmm_save", JSON.stringify({
+      state: copy
+    }));
+    log("Saved.", "dim");
+  }
+  function load() {
+    const raw = localStorage.getItem("dkmm_save"); if (!raw) return log("No save found.", "warn");
+    const sav = JSON.parse(raw);
+    Object.assign(state, sav.state);
+    renderHeader(); renderMap(); renderRoomList(); renderShops();
+    log("Loaded.", "dim");
+  }
+  function reset() { localStorage.removeItem("dkmm_save"); location.reload(); }
+
+  // ------------------ Boot ------------------
+  async function boot() {
+    await loadData();
+    // Start resources
+    state.eu = budgetRow().baseEU;
+    renderHeader(); renderShops(); renderRoomList(); renderMap();
+    // Events
+    $("#btnIncome").onclick = doIncome;
+    $("#btnStartRaid").onclick = startRaid;
+    $("#btnStep").onclick = stepRaid;
+    $("#btnResolve").onclick = ()=> { while(state.raid) stepRaid(); };
+    $("#toggleVerbosity").onclick = (e)=> {
+      state.verbose = !state.verbose;
+      e.target.setAttribute("aria-pressed", state.verbose?"true":"false");
+      e.target.textContent = `Verbose Log: ${state.verbose? "On":"Off"}`;
+    };
+    $("#saveBtn").onclick = save;
+    $("#loadBtn").onclick = load;
+    $("#resetBtn").onclick = reset;
+
+    // Theme toggles
+    $("#themeDark").onclick = ()=> document.documentElement.setAttribute("data-theme","dark");
+    $("#themeLight").onclick = ()=> document.documentElement.setAttribute("data-theme","light");
+    $("#themeSolar").onclick = ()=> document.documentElement.setAttribute("data-theme","solar");
+  }
+
+  boot();
+  </script>
+</body>
+</html>

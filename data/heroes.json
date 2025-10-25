@@ -1,0 +1,7 @@
+[
+  { "archetype": "Fighter", "tier": 2, "perception": 1, "hp": 10, "lootValue": 40, "synergyTags": ["defender","frontline"] },
+  { "archetype": "Rogue",   "tier": 1, "perception": 2, "hp":  6, "lootValue": 30, "synergyTags": ["rogue"] },
+  { "archetype": "Cleric",  "tier": 1, "perception": 1, "hp":  6, "lootValue": 35, "synergyTags": ["healer"] },
+  { "archetype": "Mage",    "tier": 2, "perception": 1, "hp":  8, "lootValue": 45, "synergyTags": ["mage","ranged"] },
+  { "archetype": "Ranger",  "tier": 2, "perception": 2, "hp":  8, "lootValue": 40, "synergyTags": ["ranged"] }
+]

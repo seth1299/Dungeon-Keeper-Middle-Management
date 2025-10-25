@@ -1,0 +1,7 @@
+[
+  { "key":"skel",  "name":"Skeleton", "tier":1, "role":"frontline", "hp":6,  "perks":[],               "euCost":50,  "upkeep":5 },
+  { "key":"imp",   "name":"Imp",      "tier":1, "role":"ambusher",  "hp":6,  "perks":[],               "euCost":45,  "upkeep":5 },
+  { "key":"arch",  "name":"Archer",   "tier":2, "role":"ranged",    "hp":8,  "perks":[],               "euCost":90,  "upkeep":10 },
+  { "key":"ogre",  "name":"Ogre",     "tier":3, "role":"frontline", "hp":12, "perks":[],               "euCost":150, "upkeep":15 },
+  { "key":"adept", "name":"Adept",    "tier":2, "role":"caster",    "hp":8,  "perks":["SupportFront"], "euCost":110, "upkeep":12 }
+]

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Kael-Mor's Command Console - Outpost 7</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a; --main-text: #e0e0e0; --border-color: #444;
+            --cell-bg: #2a2a2a; --header-text: #aaa; --accent-color: #8a2be2;
+            --minion-color: #dc3545; --hero-color: #007bff;
+        }
+        body {
+            font-family: monospace; background-color: var(--bg-color); color: var(--main-text);
+            display: flex; gap: 20px; padding: 15px;
+        }
+        .main-content { flex-grow: 1; }
+        .sidebar { width: 250px; flex-shrink: 0; display: flex; flex-direction: column; gap: 15px; }
+        .panel { background-color: var(--cell-bg); border: 1px solid var(--border-color); padding: 15px; border-radius: 5px; }
+        h2 { margin-top: 0; color: var(--accent-color); font-size: 1.2em; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;}
+        button, input[type="text"], input[type="number"] {
+            width: 100%; padding: 8px; margin-top: 5px; box-sizing: border-box; background-color: #333;
+            border: 1px solid var(--border-color); color: var(--main-text); border-radius: 3px;
+        }
+        button:hover { background-color: var(--accent-color); color: white; cursor: pointer; }
+        #dungeon-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        .grid-cell {
+            border: 1px dashed var(--border-color); background-color: var(--cell-bg);
+            min-height: 120px; padding: 5px; text-align: center; position: relative;
+        }
+        .grid-cell.room { border-style: solid; }
+        .grid-cell.selected { box-shadow: 0 0 10px var(--accent-color); border-color: var(--accent-color); }
+        .room-header { font-weight: bold; color: var(--header-text); font-size: 0.9em; margin-bottom: 5px; }
+        .unit {
+            width: 20px; height: 20px; border-radius: 50%; position: absolute;
+            cursor: grab; display: flex; align-items: center; justify-content: center;
+            font-size: 0.8em; font-weight: bold; user-select: none;
+        }
+        .unit.minion { background-color: var(--minion-color); }
+        .unit.hero { background-color: var(--hero-color); }
+        #inventory-list { list-style: none; padding: 0; margin: 0; }
+        #inventory-list li { padding: 3px; border-bottom: 1px solid #333; }
+        #inventory-list li:last-child { border-bottom: none; }
+    </style>
+</head>
+<body>
+
+    <div class="main-content">
+        <h1>Dungeon Management Console</h1>
+        <div id="dungeon-grid"></div>
+    </div>
+
+    <div class="sidebar">
+        <div class="panel">
+            <h2>STATUS</h2>
+            <div>
+                <label for="mu-tracker">Malevolence Units (MU):</label>
+                <input type="number" id="mu-tracker" value="12">
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>INVENTORY</h2>
+            <ul id="inventory-list">
+                <li>Manager's Grimoire</li>
+                <li>Phylactery (Hidden)</li>
+                <li>Soul Gems (3, empty)</li>
+            </ul>
+            <input type="text" id="inventory-item-input" placeholder="New item...">
+            <button id="add-inventory-btn">Add Item</button>
+        </div>
+
+        <div class="panel">
+            <h2>MAP CONTROLS</h2>
+            <button id="add-room-btn">Add Room</button>
+            <button id="remove-room-btn">Remove Room</button>
+            <input type="text" id="rename-input" placeholder="New room name...">
+            <button id="rename-room-btn">Rename Selected Room</button>
+        </div>
+
+        <div class="panel">
+            <h2>UNIT CONTROLS</h2>
+            <button id="add-minion-btn">Add Minion (M)</button>
+            <button id="add-hero-btn">Add Hero (H)</button>
+             <button id="remove-unit-btn">Remove Selected Unit</button>
+        </div>
+
+        <div class="panel">
+            <h2>SYSTEM</h2>
+            <button id="save-btn">Save Layout</button>
+            <input type="file" id="load-input" accept=".json" style="display:none;">
+            <button onclick="document.getElementById('load-input').click();">Load Layout</button>
+        </div>
+    </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const grid = document.getElementById('dungeon-grid');
+        const gridSize = 25; // 5x5 grid
+
+        let selectedCell = null;
+        let selectedUnit = null;
+        let unitCounter = 0;
+
+        // --- STATE MANAGEMENT ---
+        let gameState = {
+            mu: 12,
+            inventory: ["Manager's Grimoire", "Phylactery (Hidden)", "Soul Gems (3, empty)"],
+            rooms: {},
+            units: {}
+        };
+
+        const initialLayout = {
+            1: { name: "[1] Entrance Cavern" }, 3: { name: "[2] N-S Corridor" },
+            6: { name: "[3] Fungal Forest" }, 7: { name: "+" }, 8: { name: "[4] Bone Pit" },
+            13: { name: "[5] Sanctum Antechamber" }, 18: { name: "[6] Your Sanctum" }
+        };
+
+        function initializeDefaultRooms() {
+            gameState.rooms = {};
+            for(const [id, data] of Object.entries(initialLayout)) {
+                gameState.rooms[`cell-${id}`] = { name: data.name };
+            }
+        }
+        
+        // --- RENDERING FUNCTIONS ---
+        function renderGrid() {
+            grid.innerHTML = '';
+            for (let i = 0; i < gridSize; i++) {
+                const cell = document.createElement('div');
+                cell.id = `cell-${i}`;
+                cell.classList.add('grid-cell');
+                cell.addEventListener('click', () => selectCell(cell));
+                cell.addEventListener('dragover', (e) => e.preventDefault());
+                cell.addEventListener('drop', (e) => dropUnit(e, cell));
+                if (gameState.rooms[cell.id]) {
+                    cell.classList.add('room');
+                    cell.innerHTML = `<div class="room-header">${gameState.rooms[cell.id].name}</div>`;
+                }
+                grid.appendChild(cell);
+            }
+            renderUnits();
+        }
+
+        function renderUnits() {
+            document.querySelectorAll('.unit').forEach(u => u.remove());
+            for (const [id, unit] of Object.entries(gameState.units)) {
+                const unitEl = document.createElement('div');
+                unitEl.id = id;
+                unitEl.classList.add('unit', unit.type);
+                unitEl.textContent = unit.type === 'minion' ? 'M' : 'H';
+                unitEl.draggable = true;
+                unitEl.style.left = `${unit.x}px`;
+                unitEl.style.top = `${unit.y}px`;
+
+                unitEl.addEventListener('dragstart', (e) => dragUnit(e, unitEl));
+                unitEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectUnit(unitEl);
+                });
+                
+                document.getElementById(unit.location).appendChild(unitEl);
+            }
+        }
+        
+        function renderSidebar() {
+            document.getElementById('mu-tracker').value = gameState.mu;
+            const invList = document.getElementById('inventory-list');
+            invList.innerHTML = '';
+            gameState.inventory.forEach(item => {
+                const li = document.createElement('li');
+                li.textContent = item;
+                invList.appendChild(li);
+            });
+        }
+
+        function fullRender() {
+            renderGrid();
+            renderSidebar();
+        }
+
+        // --- SELECTION & DRAG/DROP ---
+        function selectCell(cell) {
+            if (selectedCell) selectedCell.classList.remove('selected');
+            if (selectedUnit) selectedUnit.classList.remove('selected');
+            selectedCell = cell;
+            selectedUnit = null;
+            selectedCell.classList.add('selected');
+        }
+
+        function selectUnit(unitEl) {
+            if (selectedUnit) selectedUnit.classList.remove('selected');
+            if (selectedCell) selectedCell.classList.remove('selected');
+            selectedUnit = unitEl;
+            selectedCell = null;
+            selectedUnit.classList.add('selected');
+        }
+
+        function dragUnit(e, unitEl) {
+            e.dataTransfer.setData('text/plain', unitEl.id);
+        }
+
+        function dropUnit(e, cell) {
+            e.preventDefault();
+            const unitId = e.dataTransfer.getData('text/plain');
+            const unitData = gameState.units[unitId];
+            if (unitData) {
+                unitData.location = cell.id;
+                // Position randomly within the cell
+                unitData.x = 10 + Math.random() * (cell.offsetWidth - 30);
+                unitData.y = 25 + Math.random() * (cell.offsetHeight - 45);
+                renderUnits();
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('mu-tracker').addEventListener('change', (e) => {
+            gameState.mu = parseInt(e.target.value, 10);
+        });
+
+        document.getElementById('add-inventory-btn').addEventListener('click', () => {
+            const input = document.getElementById('inventory-item-input');
+            if (input.value.trim()) {
+                gameState.inventory.push(input.value.trim());
+                input.value = '';
+                renderSidebar();
+            }
+        });
+
+        document.getElementById('add-room-btn').addEventListener('click', () => {
+            if (selectedCell && !gameState.rooms[selectedCell.id]) {
+                gameState.rooms[selectedCell.id] = { name: "New Room" };
+                fullRender();
+            }
+        });
+        
+        document.getElementById('remove-room-btn').addEventListener('click', () => {
+            if (selectedCell && gameState.rooms[selectedCell.id]) {
+                delete gameState.rooms[selectedCell.id];
+                fullRender();
+            }
+        });
+
+        document.getElementById('rename-room-btn').addEventListener('click', () => {
+            const newName = document.getElementById('rename-input').value;
+            if (selectedCell && gameState.rooms[selectedCell.id] && newName.trim()) {
+                gameState.rooms[selectedCell.id].name = newName;
+                document.getElementById('rename-input').value = '';
+                fullRender();
+            }
+        });
+
+        function addUnit(type) {
+             if (selectedCell) {
+                const unitId = `unit-${unitCounter++}`;
+                gameState.units[unitId] = {
+                    type: type,
+                    location: selectedCell.id,
+                    x: 10 + Math.random() * (selectedCell.offsetWidth - 30),
+                    y: 25 + Math.random() * (selectedCell.offsetHeight - 45)
+                };
+                renderUnits();
+            } else {
+                alert("Please select a cell to add the unit to.");
+            }
+        }
+
+        document.getElementById('add-minion-btn').addEventListener('click', () => addUnit('minion'));
+        document.getElementById('add-hero-btn').addEventListener('click', () => addUnit('hero'));
+        
+        document.getElementById('remove-unit-btn').addEventListener('click', () => {
+            if (selectedUnit) {
+                delete gameState.units[selectedUnit.id];
+                selectedUnit = null;
+                renderUnits();
+            }
+        });
+        
+        // --- SAVE/LOAD ---
+        document.getElementById('save-btn').addEventListener('click', () => {
+            const dataStr = JSON.stringify(gameState, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.download = 'dungeon_layout.json';
+            link.href = url;
+            link.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('load-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                try {
+                    const loadedState = JSON.parse(event.target.result);
+                    gameState = loadedState;
+                    fullRender();
+                } catch (error) {
+                    alert('Error: Could not parse the save file.');
+                    console.error("Load error:", error);
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // --- INITIALIZATION ---
+        initializeDefaultRooms();
+        fullRender();
+    });
+</script>
+
+</body>
+</html>

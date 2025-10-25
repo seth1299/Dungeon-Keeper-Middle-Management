@@ -1,0 +1,187 @@
+/* ===== Dungeon Keeper: Middle Management — Solo HTML Edition =====
+   Themeable, accessible UI for ASCII dungeon game
+   Author: you + ChatGPT
+*/
+
+/* Root tokens (default: Dark) */
+:root {
+  --bg: #0b0c0e;
+  --panel: #14161a;
+  --ink: #e8eaf0;
+  --muted: #b0b4c0;
+  --accent: #6ee7e7;
+  --accent-2: #a78bfa;
+  --danger: #ff6b6b;
+  --success: #74d99f;
+  --warn: #f5c063;
+  --border: #23262d;
+  --focus: #8bd3ff;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sans: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+}
+
+/* High-contrast Light (accessibility) */
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --panel: #f5f7fb;
+  --ink: #121318;
+  --muted: #323645;
+  --accent: #0066cc;
+  --accent-2: #5a2fc2;
+  --danger: #c10000;
+  --success: #107d39;
+  --warn: #8a5c00;
+  --border: #d9dbe2;
+  --focus: #004a99;
+}
+
+/* Solarized-ish alt */
+:root[data-theme="solar"] {
+  --bg: #002b36;
+  --panel: #013441;
+  --ink: #fdf6e3;
+  --muted: #c3d8d8;
+  --accent: #2aa198;
+  --accent-2: #b58900;
+  --danger: #dc322f;
+  --success: #859900;
+  --warn: #cb4b16;
+  --border: #0d3a44;
+  --focus: #268bd2;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans);
+}
+
+a, button {
+  font: inherit;
+}
+
+button, .btn {
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  color: #fff; border: 0; border-radius: 10px;
+  padding: 0.6rem 0.9rem; cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.25);
+}
+button.secondary, .btn.secondary {
+  background: none; color: var(--ink);
+  border: 1px solid var(--border);
+}
+button.ghost { background: none; border: 0; color: var(--muted); }
+button:focus-visible, .focus-outline:focus-visible {
+  outline: 3px solid var(--focus); outline-offset: 2px;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+header {
+  display: grid; gap: 12px; padding: 16px;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center; border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.03));
+}
+
+h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.02em; }
+small.dim { color: var(--muted); }
+
+main {
+  display: grid; gap: 16px; padding: 16px;
+  grid-template-columns: 320px 1fr 360px;
+}
+@media (max-width: 1200px) {
+  main { grid-template-columns: 1fr; }
+}
+
+.panel {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px; display: flex; flex-direction: column; gap: 12px;
+}
+
+.panel h2, .panel h3 {
+  margin: 0; font-size: 1rem; color: var(--muted); letter-spacing: 0.03em;
+}
+
+.kv {
+  display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px 12px;
+  align-items: center;
+}
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.85rem;
+  background: #1b1e25; border: 1px solid var(--border); color: var(--ink);
+}
+.badge.warn { background: rgba(245,192,99,.12); border-color: var(--warn); color: var(--warn); }
+.badge.ok   { background: rgba(116,217,159,.12); border-color: var(--success); color: var(--success); }
+.badge.danger { background: rgba(255,107,107,.12); border-color: var(--danger); color: var(--danger); }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.input, select {
+  width: 100%; padding: 8px 10px; background: #0f1116; color: var(--ink);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+:root[data-theme="light"] .input, :root[data-theme="light"] select {
+  background: #fff;
+}
+
+#ascii {
+  font-family: var(--mono); font-size: 16px; line-height: 1.15;
+  background: #000; color: #fff; padding: 12px; border-radius: 12px;
+  overflow: auto; min-height: 240px; border: 1px solid var(--border);
+  white-space: pre; /* <pre> already, but keep if we switch tags */
+}
+.map-legend {
+  display: flex; gap: 8px; flex-wrap: wrap; font-family: var(--mono);
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--border); }
+.sw-entry { background: #5eead4; }
+.sw-vault { background: #f59e0b; }
+.sw-sanctum { background: #ef4444; }
+.sw-corr { background: #8b5cf6; }
+
+.asset-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.asset {
+  border: 1px dashed var(--border); border-radius: 10px; padding: 8px;
+  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+}
+.asset .meta { color: var(--muted); font-size: 0.9rem; }
+
+.room-list { display: grid; gap: 10px; }
+.room {
+  border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: rgba(255,255,255,0.02);
+}
+.room header { display: flex; justify-content: space-between; align-items: center; padding: 0; border: 0; background: none; }
+
+.table {
+  width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.95rem;
+}
+.table th, .table td { text-align: left; padding: 6px 8px; border-bottom: 1px dashed var(--border); }
+.table th { color: var(--muted); font-weight: 400; }
+
+.log {
+  background: #000; color: #eee; font-family: var(--mono);
+  border-radius: 10px; min-height: 220px; max-height: 50vh; overflow: auto; padding: 8px;
+  border: 1px solid var(--border);
+}
+.log .ok { color: #a7f3d0; }
+.log .warn { color: #fde68a; }
+.log .bad { color: #fca5a5; }
+.log .dim { color: #9ca3af; }
+
+footer {
+  color: var(--muted); padding: 12px 16px; border-top: 1px solid var(--border);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
+}
+
+/* Utility */
+.hidden { display: none !important; }
+.hr { border-top: 1px dashed var(--border); margin: 8px 0; }

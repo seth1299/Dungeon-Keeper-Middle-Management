@@ -1,0 +1,6 @@
+[
+  { "key":"spike", "name":"Spike Plate", "tier":1, "subtlety":1, "complexity":1, "lethality":1, "reliability":0,  "riders":["Shaken"],    "euCost":60,  "upkeep":6 },
+  { "key":"darts", "name":"Poison Darts", "tier":2, "subtlety":2, "complexity":2, "lethality":2, "reliability":0,  "riders":["Shaken"],    "euCost":100, "upkeep":10 },
+  { "key":"pit",   "name":"Concealed Pit", "tier":2, "subtlety":3, "complexity":1, "lethality":2, "reliability":-1, "riders":[],            "euCost":90,  "upkeep":9 },
+  { "key":"sigil", "name":"Hex Sigil",     "tier":3, "subtlety":2, "complexity":3, "lethality":3, "reliability":1,  "riders":["Exhausted"], "euCost":160, "upkeep":16 }
+]

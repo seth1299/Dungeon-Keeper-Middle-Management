@@ -1,0 +1,8 @@
+[
+  { "id": "E", "name": "Entry", "capacity": 1, "trapSlots": 1, "tags": ["Entry"] },
+  { "id": "A", "name": "Twisting Corridor", "capacity": 2, "trapSlots": 1, "tags": ["Corridor", "AmbushFriendly"] },
+  { "id": "B", "name": "Collapsed Hall", "capacity": 2, "trapSlots": 1, "tags": ["Corridor"] },
+  { "id": "C", "name": "Gloom Walk", "capacity": 2, "trapSlots": 1, "tags": ["Corridor", "AmbushFriendly"] },
+  { "id": "V", "name": "Vault", "capacity": 2, "trapSlots": 2, "tags": ["Vault"] },
+  { "id": "S", "name": "Sanctum", "capacity": 2, "trapSlots": 2, "tags": ["Sanctum"] }
+]
