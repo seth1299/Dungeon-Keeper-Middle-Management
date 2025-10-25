@@ -488,18 +488,34 @@
   }
 
   // ------------------ Inventory Ops ------------------
-  function buyMinion(i) {
+  
+  function debugLog(msg) {
+    const toggle = document.querySelector("#debugToggle");
+    if (!toggle || !toggle.checked) return;
+    const logEl = document.querySelector("#debugLog");
+    const time = new Date().toLocaleTimeString();
+    logEl.innerHTML += `<div>[${time}] ${msg}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+function buyMinion(i) {
     const m = state.minions[i];
     if (state.eu < m.euCost) return log(`Not enough EU for ${m.name}`, "bad");
     state.eu -= m.euCost; state.inventory.minions.push(structuredClone(m));
-    renderHeader(); renderRoomList(); log(`Hired ${m.name} (T${m.tier}) for ${m.euCost} EU.`, "ok");
+    debugLog(`Attempting to purchase ${state.minions[i].name}`);
+    debugLog(`EU before purchase: ${state.eu}`);
+    renderHeader();
+    debugLog(`EU after purchase: ${state.eu}`); renderRoomList(); log(`Hired ${m.name} (T${m.tier}) for ${m.euCost} EU.`, "ok");
   }
   function buyTrap(i) {
     const t = state.traps[i];
     if (state.eu < t.euCost) return log(`Not enough EU for ${t.name}`, "bad");
     state.eu -= t.euCost; const inst = structuredClone(t); inst.inert = false;
     state.inventory.traps.push(inst);
-    renderHeader(); renderRoomList(); log(`Purchased ${t.name} (T${t.tier}) for ${t.euCost} EU.`, "ok");
+    debugLog(`Attempting to purchase ${state.traps[i].name}`);
+    debugLog(`EU before purchase: ${state.eu}`);
+    renderHeader();
+    debugLog(`EU after purchase: ${state.eu}`); renderRoomList(); log(`Purchased ${t.name} (T${t.tier}) for ${t.euCost} EU.`, "ok");
   }
   function assignMinion(roomId, idx) {
     const room = state.rooms.find(r=>r.id===roomId);

@@ -22,7 +22,7 @@
 2. Launch the desktop build for local play: `python app.py`.
 3. Package a single-file executable:
    - macOS/Linux: `pyinstaller --onefile --windowed --add-data "index.html:." --add-data "styles.css:." --add-data "data:data" app.py`
-   - Windows (use `;` instead of `:`): `pyinstaller --onefile --windowed --add-data "index.html;." --add-data "styles.css;." --add-data "data;data" app.py`
+   - Windows (use `;` instead of `:`): `pyinstaller --onefile --windowed --add-data "index.html;." --add-data "styles.css;." --add-data "data;data" --name "Dungeon Keeper - Middle Management" app.py`
 
 The packaged build embeds the `/data` directory, so JSON overrides load without any CORS hassles. Browser mode still works for lightweight hosting or sharing the raw HTML.
 
