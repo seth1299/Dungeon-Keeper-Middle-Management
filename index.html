@@ -50,14 +50,21 @@
 
     <!-- CENTER: MAP + ROOMS -->
     <section class="panel" aria-label="Dungeon Map">
-      <h2>Dungeon Map (ASCII)</h2>
+      <h2>Dungeon Map</h2>
       <div class="map-legend">
-        <span class="legend-item"><span class="legend-swatch sw-entry"></span> Entry(E)</span>
-        <span class="legend-item"><span class="legend-swatch sw-corr"></span> Corridor(A/B/C)</span>
-        <span class="legend-item"><span class="legend-swatch sw-vault"></span> Vault(V)</span>
-        <span class="legend-item"><span class="legend-swatch sw-sanctum"></span> Sanctum(S)</span>
+        <span class="legend-item"><span class="legend-swatch sw-entry"></span> Entry</span>
+        <span class="legend-item"><span class="legend-swatch sw-corr"></span> Corridor</span>
+        <span class="legend-item"><span class="legend-swatch sw-vault"></span> Vault</span>
+        <span class="legend-item"><span class="legend-swatch sw-sanctum"></span> Sanctum</span>
+        <span class="legend-item"><span class="legend-chip">🛡</span> Minions</span>
+        <span class="legend-item"><span class="legend-chip">⚙️</span> Traps</span>
+        <span class="legend-item"><span class="legend-chip hero">⚔️</span> Heroes</span>
       </div>
-      <pre id="ascii" role="img" aria-label="ASCII dungeon map"></pre>
+      <div id="mapCanvas" class="map-canvas" role="application" aria-label="Dungeon layout">
+        <svg class="map-edges" aria-hidden="true"></svg>
+        <div class="map-nodes"></div>
+      </div>
+      <div id="mapStatus" class="sr-only" aria-live="polite"></div>
 
       <div class="hr"></div>
       <h3>Rooms</h3>
@@ -147,6 +154,9 @@
     ],
   };
 
+  const desktopBridge = window.dkmm ?? window.pywebview?.api ?? null;
+  const isDesktopApp = Boolean(desktopBridge?.loadJSON);
+
   // ------------------ State ------------------
   const state = {
     threat: 1, reputation: 0, eu: 0,
@@ -158,16 +168,27 @@
     phylactery: "S",                       // default Sanctum
     raid: null,                            // current raid info
     verbose: false,
+    selectedRoom: null,
   };
 
   // ------------------ Data Loading (optional JSON overrides) ------------------
   async function loadData() {
     const tryGet = async (path) => {
+      if (isDesktopApp) {
+        try {
+          return await desktopBridge.loadJSON(path);
+        } catch (err) {
+          console.warn('Desktop bridge failed to load', path, err);
+          return null;
+        }
+      }
       try {
         const r = await fetch(path);
         if (!r.ok) throw new Error("not ok");
         return await r.json();
-      } catch { return null; }
+      } catch {
+        return null;
+      }
     };
     const b = await tryGet("data/budgets.json") || DEFAULT.budgets;
     const r = await tryGet("data/rooms.json")   || DEFAULT.rooms;
@@ -214,30 +235,179 @@
     $("#phase").textContent = state.phase;
   }
 
-  function asciiMap() {
-    // Fixed layout for the 6-room sample graph (E-A-B-V and B-C-S)
-    //   E—A—B—V
-    //        └─C─S
-    // Boxes show room ids; we will annotate with counts.
-    const c = (id) => {
-      const mCount = state.placed.minions[id].length;
-      const tCount = state.placed.traps[id].length;
-      const p = (state.phylactery===id) ? "*" : " ";
-      return `[${id}${p}|m${mCount}|t${tCount}]`;
-    };
-    // attempt to position by ids present:
-    const has = (id) => state.rooms.find(x=>x.id===id);
-    const line1 = `${has("E")?c("E"):""}—${has("A")?c("A"):""}—${has("B")?c("B"):""}—${has("V")?c("V"):""}`;
-    const line2 = `           └─${has("C")?c("C"):""}─${has("S")?c("S"):""}`;
-    return [line1, line2].join("\\n");
+  function mapRoomType(room) {
+    const tags = room?.tags || [];
+    if (tags.includes("Entry")) return "entry";
+    if (tags.includes("Sanctum")) return "sanctum";
+    if (tags.includes("Vault")) return "vault";
+    return "corridor";
   }
 
-  function renderMap() { $("#ascii").textContent = asciiMap(); }
+  function computeMapLayout() {
+    const layout = {};
+    if (!state.rooms.length) return layout;
+    const ids = state.rooms.map(r => r.id);
+    const entryRoom = state.rooms.find(r => (r.tags||[]).includes("Entry")) || state.rooms[0];
+    const startId = entryRoom ? entryRoom.id : ids[0];
+    const q = [];
+    const seen = new Set();
+    const level = {};
+    if (startId) {
+      q.push(startId);
+      seen.add(startId);
+      level[startId] = 0;
+    }
+    while (q.length) {
+      const id = q.shift();
+      for (const nb of neighbors(id)) {
+        if (!ids.includes(nb) || seen.has(nb)) continue;
+        seen.add(nb);
+        level[nb] = (level[id] ?? 0) + 1;
+        q.push(nb);
+      }
+    }
+    const visitedLevels = Object.values(level);
+    let maxLevel = visitedLevels.length ? Math.max(...visitedLevels) : 0;
+    let fallbackLevel = maxLevel + 1;
+    for (const id of ids) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      level[id] = fallbackLevel++;
+    }
+    const groups = {};
+    for (const id of ids) {
+      const lvl = level[id] ?? 0;
+      groups[lvl] = groups[lvl] || [];
+      groups[lvl].push(id);
+    }
+    const sortedLevels = Object.keys(groups).map(Number).sort((a,b)=>a-b);
+    maxLevel = sortedLevels.length ? Math.max(...sortedLevels) : 0;
+    for (const lvl of sortedLevels) {
+      const nodes = groups[lvl].sort((a,b)=>a.localeCompare(b));
+      const denom = Math.max(1, nodes.length - 1);
+      const top = maxLevel === 0 ? 50 : (lvl / maxLevel) * 80 + 10;
+      nodes.forEach((id, idx) => {
+        const left = nodes.length === 1 ? 50 : (idx / denom) * 80 + 10;
+        layout[id] = { left, top, level: lvl };
+      });
+    }
+    return layout;
+  }
+
+  function pluralize(count, singular, plural = `${singular}s`) {
+    return `${count} ${count === 1 ? singular : plural}`;
+  }
+
+  function focusRoom(roomId, options = {}) {
+    if (!roomId) return;
+    state.selectedRoom = roomId;
+    renderMap();
+    renderRoomList();
+    if (options.scroll === false) return;
+    const target = document.getElementById(`room-${roomId}`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      target.classList.add("pulse");
+      setTimeout(() => target.classList.remove("pulse"), 800);
+    }
+  }
+
+  function renderMap() {
+    const canvas = $("#mapCanvas");
+    if (!canvas) return;
+    const svg = canvas.querySelector(".map-edges");
+    const nodesLayer = canvas.querySelector(".map-nodes");
+    if (!svg || !nodesLayer) return;
+    svg.innerHTML = "";
+    nodesLayer.innerHTML = "";
+
+    if (!state.rooms.length) {
+      $("#mapStatus").textContent = "No rooms available.";
+      return;
+    }
+
+    if (!state.selectedRoom) {
+      const fallback = state.rooms.find(r => (r.tags||[]).includes("Entry")) || state.rooms[0];
+      state.selectedRoom = fallback?.id || null;
+    }
+
+    const layout = computeMapLayout();
+    const raid = state.raid;
+
+    for (const [a, b] of state.edges) {
+      if (!layout[a] || !layout[b]) continue;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", `${layout[a].left}%`);
+      line.setAttribute("y1", `${layout[a].top}%`);
+      line.setAttribute("x2", `${layout[b].left}%`);
+      line.setAttribute("y2", `${layout[b].top}%`);
+      line.classList.add("map-edge");
+      if (raid) {
+        if (raid.visited?.has(a) && raid.visited?.has(b)) line.classList.add("is-visited");
+        if (raid.current === a || raid.current === b) line.classList.add("is-active");
+      }
+      svg.appendChild(line);
+    }
+
+    for (const room of state.rooms) {
+      const pos = layout[room.id] || { left: 50, top: 50 };
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const type = mapRoomType(room);
+      btn.className = `map-node map-node-${type}`;
+      if (state.selectedRoom === room.id) btn.classList.add("is-selected");
+      if (raid?.visited?.has(room.id)) btn.classList.add("is-visited");
+      if (raid?.current === room.id) btn.classList.add("has-heroes");
+      if (state.phylactery === room.id) btn.classList.add("is-phylactery");
+      btn.style.left = `${pos.left}%`;
+      btn.style.top = `${pos.top}%`;
+
+      const minions = state.placed.minions[room.id] || [];
+      const traps = state.placed.traps[room.id] || [];
+      const heroCount = raid && raid.current === room.id ? raid.party.length : 0;
+      const goalTag = state.phylactery === room.id ? `<span class="map-chip goal">☠️ Phylactery</span>` : "";
+      btn.innerHTML = `
+        <span class="map-room-id">${room.id}</span>
+        <span class="map-room-name">${room.name}</span>
+        <div class="map-node-stats">
+          <span class="map-chip">🛡 ${minions.length}</span>
+          <span class="map-chip">⚙️ ${traps.length}</span>
+          ${goalTag}
+          ${heroCount ? `<span class="map-chip hero">⚔️ ${heroCount}</span>` : ""}
+        </div>
+      `;
+      const ariaParts = [
+        `${room.name} (${room.id})`,
+        pluralize(minions.length, "minion"),
+        pluralize(traps.length, "trap")
+      ];
+      if (state.phylactery === room.id) ariaParts.push("contains the phylactery");
+      if (heroCount) ariaParts.push(`${heroCount} hero${heroCount === 1 ? "" : "es"} present`);
+      btn.setAttribute("aria-label", ariaParts.join(", "));
+      btn.onclick = () => focusRoom(room.id);
+      nodesLayer.appendChild(btn);
+    }
+
+    const selected = state.rooms.find(r => r.id === state.selectedRoom);
+    const status = raid
+      ? `Heroes currently in ${raid.current} with ${pluralize(raid.party.length, "hero")} remaining.`
+      : selected
+        ? `Selected room ${selected.name} (${selected.id}).`
+        : "Select a room to see details.";
+    $("#mapStatus").textContent = status;
+  }
 
   function renderRoomList() {
     const el = $("#roomList"); el.innerHTML = "";
+    if (!state.selectedRoom && state.rooms.length) {
+      const fallback = state.rooms.find(r => (r.tags||[]).includes("Entry")) || state.rooms[0];
+      state.selectedRoom = fallback?.id || null;
+    }
     for (const room of state.rooms) {
-      const div = document.createElement("div"); div.className = "room";
+      const div = document.createElement("div");
+      div.className = "room";
+      if (state.selectedRoom === room.id) div.classList.add("is-selected");
+      div.id = `room-${room.id}`;
       div.innerHTML = `
         <header><strong>${room.name}</strong>
           <span class="badge">${room.id}</span>
@@ -284,6 +454,10 @@
       };
       // phylactery toggle
       div.querySelector(`input[name="phy"]`).onchange = (e)=> { state.phylactery = e.target.value; renderMap(); };
+      div.addEventListener("click", (e) => {
+        if (e.target.closest("button, select, input, label")) return;
+        focusRoom(room.id, { scroll: false });
+      });
     }
   }
 
@@ -699,6 +873,13 @@
     $("#themeDark").onclick = ()=> document.documentElement.setAttribute("data-theme","dark");
     $("#themeLight").onclick = ()=> document.documentElement.setAttribute("data-theme","light");
     $("#themeSolar").onclick = ()=> document.documentElement.setAttribute("data-theme","solar");
+
+    if (isDesktopApp) {
+      const footer = document.querySelector('footer');
+      if (footer) {
+        footer.textContent = 'Desktop build ready: data overrides load from the bundled /data folder, and you can create executables via “npm run dist”.';
+      }
+    }
   }
 
   boot();

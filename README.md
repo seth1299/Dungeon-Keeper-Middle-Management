@@ -1,13 +1,30 @@
 # Dungeon Keeper: Middle Management — Solo HTML Edition (GDD)
 
 **Revision:** v0.9 (Solo Edition)  
-**Audience:** Single-player, browser (desktop/mobile)  
+**Audience:** Single-player, browser (desktop/mobile) or packaged desktop app
 **Session Length:** 10–25 minutes per raid cycle  
 **Pillars:**  
 1) **Plan smart** (resource tradeoffs, room synergies)  
 2) **Resolve fast** (one-roll skirmishes, tight tables)  
 3) **Grow notorious** (Threat & Reputation feedback)  
 4) **Protect the phylactery** (clear loss state with upgrades)
+
+---
+
+## Quick start & runtime options
+
+### Browser (classic static files)
+1. Serve the repo with any static web server (e.g., `python -m http.server 8000`).
+2. Visit `http://localhost:8000/index.html` in your browser.
+
+### Desktop applet (Python + PyInstaller)
+1. Install dependencies: `pip install -r requirements.txt`.
+2. Launch the desktop build for local play: `python app.py`.
+3. Package a single-file executable:
+   - macOS/Linux: `pyinstaller --onefile --windowed --add-data "index.html:." --add-data "styles.css:." --add-data "data:data" app.py`
+   - Windows (use `;` instead of `:`): `pyinstaller --onefile --windowed --add-data "index.html;." --add-data "styles.css;." --add-data "data;data" app.py`
+
+The packaged build embeds the `/data` directory, so JSON overrides load without any CORS hassles. Browser mode still works for lightweight hosting or sharing the raw HTML.
 
 ---
 
