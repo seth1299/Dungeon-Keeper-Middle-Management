@@ -318,3 +318,13 @@ footer {
 /* Utility */
 .hidden { display: none !important; }
 .hr { border-top: 1px dashed var(--border); margin: 8px 0; }
+
+#debugLog {
+  background: #111;
+  color: #0f0;
+  font-family: monospace;
+  padding: 6px;
+  height: 120px;
+  overflow-y: auto;
+  border-top: 1px solid #333;
+}
